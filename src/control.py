@@ -43,3 +43,44 @@ def hold_last(control):
     held[seen] = control[idx[seen]]
     age = np.where(seen, pos - idx, -1)
     return held, age
+
+
+
+# Domain assumption, not tuned on this match: a real change of possession needs the new team
+# to actually control the ball for about one second (25 frames), not just pass close by.
+MIN_CONTROL_FRAMES = 25
+
+
+def confirm_control(control, min_frames=MIN_CONTROL_FRAMES):
+    """Possession series that only changes team after the new team has controlled the ball
+    for at least min_frames frames (observations may be interrupted by gaps of up to
+    min_frames frames). The switch is dated back to when the new team first took control,
+    so confirming adds no delay. Frames before the first observation stay NONE.
+    """
+    n = len(control)
+    events = []
+    cur = NONE
+    cand, cand_start, cand_count, cand_last = NONE, -1, 0, -1
+    for i in range(n):
+        c = control[i]
+        if c == NONE:
+            continue
+        if cur == NONE:                      # first ever observation
+            cur = c
+            events.append((i, c))
+            continue
+        if c == cur:                         # current team seen again: drop any candidate
+            cand, cand_count = NONE, 0
+            continue
+        if c != cand or i - cand_last > min_frames:
+            cand, cand_start, cand_count = c, i, 0
+        cand_count += 1
+        cand_last = i
+        if cand_count >= min_frames:
+            cur = c
+            events.append((cand_start, c))
+            cand, cand_count = NONE, 0
+    held = np.full(n, NONE, dtype=np.int8)
+    for start, team in events:
+        held[start:] = team
+    return held
