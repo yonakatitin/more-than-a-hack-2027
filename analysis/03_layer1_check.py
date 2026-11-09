@@ -7,7 +7,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.join(ROOT, "starter"))
 from src.tracking import load_tracking, graded_mask, FPS, GRADED  # noqa: E402
-from src.control import control_from_ball, hold_last, NONE  # noqa: E402
+from src.control import control_from_ball, hold_last, confirm_control, NONE  # noqa: E402
 
 
 def run_lengths(x):
@@ -44,3 +44,13 @@ for name, (s, e) in zip(("1st half", "2nd half"), GRADED):
     sec = lens[keep] / FPS
     print("  {}: {} runs, median {:.1f} s, mean {:.1f} s, {:.0%} shorter than 2 s".format(
         name, len(sec), np.median(sec), sec.mean(), (sec < 2).mean()))
+
+print("\n== 4. Same runs after requiring ~1 s of real control before a switch ==")
+confirmed = confirm_control(control)
+for name, (s, e) in zip(("1st half", "2nd half"), GRADED):
+    vals, lens = run_lengths(confirmed[s:e + 1])
+    keep = vals != NONE
+    sec = lens[keep] / FPS
+    print("  {}: {} runs, median {:.1f} s, mean {:.1f} s, {:.0%} shorter than 2 s".format(
+        name, len(sec), np.median(sec), sec.mean(), (sec < 2).mean()))
+print("frames whose label changed vs section 3: {:.1%}".format((confirmed[g] != held[g]).mean()))
