@@ -1,7 +1,7 @@
 # Technical document: ball possession (More than a Hack 2027, Phase 1)
 
-**Team:** [TEAM NAME]
-**Submitted file:** `evaluation/results/v2.csv`, uploaded as `[TEAM NAME].csv`
+**Team:** DeculGirl
+**Submitted file:** `evaluation/results/v2.csv`, uploaded as `DeculGirl.csv`
 **Environment:** Python 3.14, numpy 2.5.4, pandas 3.1.0
 
 ## 1. Summary
@@ -85,7 +85,9 @@ exploration, to read what labels look like (label shares, ball visibility). We a
 Smart Tagging team tags against it to understand them, and did not use the result. No parameter
 was chosen, and no version was selected, from its score. The submitted version (v2) was chosen on
 football grounds before its public score was seen.
-Public check (17 possessions, too few to rank on): spellF1 [TODO], macroF1 [TODO].
+Public check (17 possessions, too few to rank on): spellF1 0.4457, macroF1 0.6515. The
+earlier version v1 (without the still-players rule) scores identically there, because the rule
+never fires in that window, so the public file cannot tell the two versions apart.
 
 ## 8. Limitations
 - **Long missing-ball stretches.** The ball is untracked on about 41% of graded frames, often for
