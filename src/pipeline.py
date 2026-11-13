@@ -10,7 +10,7 @@ import pandas as pd
 from src.tracking import load_tracking, graded_mask, FPS, GRADED, N_FRAMES, ROOT  # noqa: E402
 from src.control import control_from_ball, confirm_control, HOME, AWAY, NONE  # noqa: E402
 from src.deadball import (median_player_speed, dead_from_set_pieces,  # noqa: E402
-                          dead_before_kickoff)
+                          dead_from_still_players, dead_before_kickoff)
 import load_smart_tagging as st  # noqa: E402
 
 
@@ -43,7 +43,7 @@ def build_labels():
     control, _ = control_from_ball(t["ball"], t["players"], t["team"])
     speed = median_player_speed(t["players"])
     dead_sp, _ = dead_from_set_pieces(st.load(), speed)
-    dead = (dead_sp | dead_before_kickoff()) & graded
+    dead = (dead_sp | dead_from_still_players(speed) | dead_before_kickoff()) & graded
     live = graded & ~dead
     team = team_series(control, live)
     labels = np.full(N_FRAMES, "X", dtype="<U1")
