@@ -16,6 +16,8 @@ HOLD_FRAMES = 3 * FPS         # play counts as resumed once players stay that fa
 MAX_DEAD_FRAMES = 20 * FPS    # a restart rarely takes longer; also caps the damage if speed never rises
 SMOOTH_FRAMES = FPS           # 1 s smoothing of the speed signal
 MAX_PLAYER_SPEED = 12.0       # m/s: faster than this is a tracking jump
+STILL_SPEED = 0.5             # m/s: well below relaxed walking; the whole team is standing
+STILL_FRAMES = 5 * FPS        # ... for at least 5 s
 
 
 def median_player_speed(players):
@@ -63,4 +65,19 @@ def dead_before_kickoff(n=N_FRAMES):
     dead = np.zeros(n, dtype=bool)
     for (start, _end), half in zip(GRADED, ("1st Half", "2nd Half")):
         dead[start:KICKOFF_VIDEO_FRAMES[half]] = True
+    return dead
+
+
+def dead_from_still_players(speed, n=N_FRAMES):
+    """Dead-ball mask where the players' median speed stays under STILL_SPEED for STILL_FRAMES+.
+
+    Catches stoppages Smart Tagging does not mark (fouls, injuries, VAR, ...). Caveat: a frozen
+    tracker would look the same, and we cannot tell the two apart without the video.
+    """
+    still = np.nan_to_num(speed, nan=np.inf) < STILL_SPEED
+    edge = np.diff(np.concatenate([[0], still.astype(np.int8), [0]]))
+    dead = np.zeros(n, dtype=bool)
+    for s, e in zip(np.flatnonzero(edge == 1), np.flatnonzero(edge == -1)):
+        if e - s >= STILL_FRAMES:
+            dead[s:e] = True
     return dead
