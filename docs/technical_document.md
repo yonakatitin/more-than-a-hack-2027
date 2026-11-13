@@ -15,7 +15,9 @@ assumption, not a value fitted to this match. Three layers:
 3. **Dead ball.** A `SET PIECES` window from Smart Tagging (kick offs excluded) starts a dead-ball
    stretch, which ends when the players' median speed (smoothed over 1 s) stays above 1.5 m/s for
    3 s, capped at 20 s. All frames from the start of the second graded half to its kick off are
-   also dead.
+   also dead. Dead ball is also assigned to any run of at least 5 s where the players' median speed 
+   stays under 0.5 m/s, to catch stoppages Smart Tagging does not mark (about 3.5% of graded frames 
+   lie in such runs far from any tagged set piece).
 
 Assembly: possession is computed separately inside each stretch of live play, so it never carries
 across a stoppage; the first team to control the ball after a restart owns the frames before it.
@@ -35,7 +37,7 @@ provided video or on the ground truth. [TODO: add external data here if we use a
   (the 1 s confirmation).
 - Loose or untracked ball: possession stays with the last team that controlled it.
 - Restart: ownership is not carried over a stoppage; the first team to control the ball owns it.
-- Dead ball: set pieces and the pre-kick-off period only.
+- Dead ball: tagged set pieces, long stretches where all players are nearly still, and the pre-kick-off period.
 
 ## Limitations
 - When the ball is untracked for long stretches (about 41% of graded frames), the label only holds
@@ -46,6 +48,8 @@ provided video or on the ground truth. [TODO: add external data here if we use a
 - The thresholds are physical and football-based assumptions and were not checked on external data.
 - The public 5-minute ground truth has only 17 possessions: it was used to check that the
   pipeline runs, not to choose between versions. [TODO: final public score]
+- The still-players rule cannot distinguish a real stoppage from a frozen tracker. Both thresholds 
+  (0.5 m/s, 5 s) are football-based assumptions, not checked on external data.
 
 ## Reproduction
 ```bash
