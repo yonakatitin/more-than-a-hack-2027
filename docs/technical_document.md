@@ -1,64 +1,119 @@
 # Technical document: ball possession (More than a Hack 2027, Phase 1)
 
-Team: [TODO team name] · Python 3.14, numpy 2.5.4, pandas 3.1.0
+**Team:** [TEAM NAME]
+**Submitted file:** `evaluation/results/v2.csv`, uploaded as `[TEAM NAME].csv`
+**Environment:** Python 3.14, numpy 2.5.4, pandas 3.1.0
 
-## Approach
-A transparent rule-based pipeline: no model, no training. Every parameter is a stated domain
-assumption, not a value fitted to this match. Three layers:
+## 1. Summary
+A transparent, rule-based pipeline with no learned model and no training. It labels every video
+frame of the tactical recording `H`, `A`, `D` or `X` using only the automatic tracking and the
+set-piece windows of Smart Tagging. Every parameter is a stated football or physics assumption,
+not a value fitted to this match. We chose rules over a model because the competition forbids
+tuning on the match's ground truth and we used no external labelled data, so a learned model had
+nothing legitimate to learn from.
 
-1. **Control.** On each frame with a tracked ball, the nearest tracked player controls it if
-   within 2.5 m; otherwise nobody does (ball loose, in the air, or untracked).
-2. **Confirmation and hold.** A possession change is accepted only after the new team has controlled
-   the ball for 25 frames (1 s, gaps between observations up to 1 s). The change is dated to the
-   first such observation. While nobody controls the ball the last team keeps it, as the
-   challenge rules say for loose balls.
-3. **Dead ball.** A `SET PIECES` window from Smart Tagging (kick offs excluded) starts a dead-ball
-   stretch, which ends when the players' median speed (smoothed over 1 s) stays above 1.5 m/s for
-   3 s, capped at 20 s. All frames from the start of the second graded half to its kick off are
-   also dead. Dead ball is also assigned to any run of at least 5 s where the players' median speed 
-   stays under 0.5 m/s, to catch stoppages Smart Tagging does not mark (about 3.5% of graded frames 
-   lie in such runs far from any tagged set piece).
+## 2. Approach
+Three layers, then an assembly step.
 
-Assembly: possession is computed separately inside each stretch of live play, so it never carries
-across a stoppage; the first team to control the ball after a restart owns the frames before it.
-Frames outside the two halves are `X`.
+1. **Control.** On a frame with a tracked ball, the nearest tracked player controls it if he is
+   within 2.5 m. Otherwise nobody does (loose, in the air, or untracked ball).
+2. **Confirmation and hold.** A change of possession is accepted only after the new team has
+   controlled the ball for 25 frames (1 s), with gaps between observations of up to 1 s. The
+   change is dated back to the first of those observations, so confirming adds no delay. While
+   nobody controls the ball the last team keeps it, as the challenge rules state for loose balls.
+   This is what removes the frame-level flicker of "nearest player wins": the same idea as the
+   provided smoothing baselines, but event-based instead of a fixed window.
+3. **Dead ball** (`D`), from three sources:
+   - A `SET PIECES` window from Smart Tagging (kick offs excluded) starts a dead-ball stretch.
+     It ends when the median speed of the tracked players (smoothed over 1 s) stays above 1.5 m/s
+     for 3 s, and lasts at most 20 s.
+   - Any run of at least 5 s where that median speed stays below 0.5 m/s, to catch stoppages that
+     Smart Tagging does not mark (fouls, injuries, VAR). Smart Tagging lists only 5 free kicks in
+     the whole match, so many such stoppages are untagged.
+   - Everything from the start of the second graded half until its kick off.
+4. **Assembly.** Possession is computed separately inside each stretch of live play, so it never
+   carries across a stoppage: the first team to control the ball after a restart owns the frames
+   before it (look-ahead, since processing is offline). A live stretch with no observed control at
+   all takes the nearest known team. Frames outside the two halves are `X`.
 
-## Assets used
-- Tactical tracking (ATD): positions of the 46 track slots and the ball.
-- Smart Tagging: only the `SET PIECES` windows and the two kick-off frames.
-- Not used: video, broadcast feed, homography, Smart Tagging `Team` tag and phase codes.
+Result on the 158,857 graded frames: 68,686 `H`, 65,656 `A`, 24,515 `D`, about 180 label runs
+per half.
 
-## Training data
-None. No labelled dataset was used and nothing was trained. No parameter was tuned on the
-provided video or on the ground truth. [TODO: add external data here if we use any]
+## 3. Assets
+- **Used:** tactical tracking (ATD): positions of the track slots and of the ball, and the team of
+  each slot. Smart Tagging: the `SET PIECES` windows and the two kick-off frames.
+- **Examined and dropped:**
+  - Smart Tagging `Team` tags and phase codes. `DATA.md` says some are `N/A` (every throw-in), and we
+    could not confirm what the tag means in the defending phases without relying on the ground
+    truth, so we did not use it.
+  - "Ball outside the pitch" as a dead-ball signal: it adds only about 0.5% of graded frames beyond
+    what set-piece windows already cover.
+- **Not used:** the video, the broadcast recording (not synchronised), and the homography.
 
-## Possession rules implemented
-- Controlled possession needs a player within 2.5 m; passing close to the ball is not enough
-  (the 1 s confirmation).
-- Loose or untracked ball: possession stays with the last team that controlled it.
-- Restart: ownership is not carried over a stoppage; the first team to control the ball owns it.
-- Dead ball: tagged set pieces, long stretches where all players are nearly still, and the pre-kick-off period.
+## 4. Training data
+None. No labelled dataset was used and nothing was trained, tuned or calibrated on the
+provided game, its ground truth or its video.
 
-## Limitations
-- When the ball is untracked for long stretches (about 41% of graded frames), the label only holds
-  the last team. There is no model of play from the players alone.
-- Dead ball is only detected around tagged set pieces; fouls, injuries, VAR and goals
-  are missed, so `D` is underestimated.
-- The first observation after a restart is trusted immediately.
-- The thresholds are physical and football-based assumptions and were not checked on external data.
-- The public 5-minute ground truth has only 17 possessions: it was used to check that the
-  pipeline runs, not to choose between versions. [TODO: final public score]
-- The still-players rule cannot distinguish a real stoppage from a frozen tracker. Both thresholds 
-  (0.5 m/s, 5 s) are football-based assumptions, not checked on external data.
+## 5. Possession rules implemented
+- Controlled possession needs a player within 2.5 m. Passing close to the ball is not enough
+  (hence the 1 s confirmation).
+- Loose, contested or untracked ball: possession stays with the last team that controlled it.
+- Restart: ownership is not carried over a stoppage. The first team to control the ball owns it.
+- Dead ball: tagged set pieces, long stretches where all players are nearly still, and the period
+  before the second-half kick off. Dead-ball ownership is not asked for, so `D` carries no team.
 
-## Reproduction
+## 6. Parameters and where they come from
+All values are fixed assumptions, chosen on football or physics grounds and never optimised
+against any score.
+
+| Parameter | Value | Reason |
+|---|---|---|
+| Control distance | 2.5 m | A player can only play the ball from within a couple of metres; tracking error is about 1 m |
+| Confirmation time | 25 frames (1 s) | About one real control or pass; shorter touches are not a change of possession |
+| Gap tolerance while confirming | 1 s | Brief tracking drop-outs should not reset the count |
+| Resume speed / hold | 1.5 m/s / 3 s | Slightly above relaxed walking (about 1.3-1.4 m/s), sustained rather than a spike |
+| Maximum dead stretch per set piece | 20 s | A restart rarely takes longer; also bounds the damage if speed never rises |
+| Still threshold / duration | 0.5 m/s / 5 s | Far below walking speed, for long enough to be a stoppage |
+| Speed smoothing / jump limit | 1 s / 12 m/s | Reduces noise; faster than a sprint is a tracking jump |
+
+Transparency note: the speed values around set pieces were inspected on the provided tracking
+(descriptive statistics only, no ground truth) before adopting the thresholds above.
+
+## 7. Use of the public ground truth
+The 5-minute public file was used to check that the pipeline runs end to end and, during
+exploration, to read what labels look like (label shares, ball visibility). We also compared
+Smart Tagging team tags against it to understand them, and did not use the result. No parameter
+was chosen, and no version was selected, from its score. The submitted version (v2) was chosen on
+football grounds before its public score was seen.
+Public check (17 possessions, too few to rank on): spellF1 [TODO], macroF1 [TODO].
+
+## 8. Limitations
+- **Long missing-ball stretches.** The ball is untracked on about 41% of graded frames, often for
+  tens of seconds. There the pipeline only holds the last team and has no model of play from the
+  players alone. This is the largest weakness. It cannot be measured on the public 5 minutes,
+  where the ball is nearly always visible.
+- **Dead ball is incomplete.** It covers tagged set pieces and long still stretches. Stoppages that
+  are neither (short fouls, goals and celebrations) are missed or only partly covered.
+- **Frozen tracker vs real stoppage.** The still-players rule cannot tell them apart without the
+  video.
+- **First observation after a restart is trusted immediately,** so a stray frame can mislabel the
+  first moments of a stretch.
+- **Thresholds are unverified.** They were not checked on external data.
+
+## 9. With more time
+Check the thresholds on an external dataset with tracking and events (license permitting), model
+the missing-ball periods from team shape and movement, replace the hold-last rule by a
+decoder with an explicit switching cost, and confirm the meaning of the Smart Tagging team tag
+with the organisers before using it.
+
+## 10. Reproduction
+The pipeline is deterministic: no randomness is used.
 ```bash
 python -m venv .venv
 .venv\Scripts\Activate.ps1          # Windows PowerShell
 pip install -r requirements.txt
 # unpack the data bundle into ./data (or set MTAH_DATA_DIR)
-python -m src.pipeline <name>        # writes evaluation/results/<name>.csv
-python evaluation/validate_submission.py evaluation/results/<name>.csv
+python -m src.pipeline v2            # writes evaluation/results/v2.csv
+python evaluation/validate_submission.py evaluation/results/v2.csv
 ```
-The first run parses the tracking file and caches it under `data/cache` (about 1-2 minutes).
-Re-running gives a byte-identical file.
+The first run parses the tracking file (about 1-2 minutes) and caches it in `data/cache`.
